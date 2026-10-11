@@ -21,6 +21,8 @@ def validate_record(data):
 def validate_bank(data):
     if len(data) != BANK_SIZE:
         raise ValueError("E-Mark 配置集合长度必须是 666 字节")
+    if data[:4] in (b"\x00" * 4, b"\xff" * 4) and data[4:] == b"\xff" * (BANK_SIZE - 4):
+        raise ValueError("设备尚未保存自定义 E-Mark 配置。内置档位不在本次读取范围内。可导入 .wtemark 或点 + 新增配置，再备份并写入。")
     selected, count = data[4:6]
     if count > CAPACITY or (selected >= count if count else selected != 0):
         raise ValueError("E-Mark 配置数量或默认组无效")

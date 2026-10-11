@@ -11,7 +11,7 @@ struct K2UpdaterApp: App {
     @State private var selection: ToolSection? = .monitor
 
     var body: some Scene {
-        Window("WITRN K2", id: "main") {
+        Window("维简 Mac · WITRN K2", id: "main") {
             ContentView(store: store, picture: picture, emark: emark, monitor: monitor, selection: $selection)
                 .background(WindowGuard(store: store, picture: picture, emark: emark, monitor: monitor))
                 .onAppear { delegate.store = store; delegate.picture = picture; delegate.emark = emark; delegate.monitor = monitor; monitor.attach(store) }
@@ -25,15 +25,15 @@ struct K2UpdaterApp: App {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .newItem) {
                 Button("打开…") { if selection == .monitor { monitor.open() } else if selection == .firmware { FirmwarePicker.choose(store) } else if selection == .emark { emark.open() } else { picture.open() } }
-                    .keyboardShortcut("o").disabled(store.isBusy)
-                Button("保存工程") { if selection == .emark { emark.save() } else { picture.save() } }.keyboardShortcut("s").disabled(store.isBusy || selection == .firmware || selection == .monitor)
-                Button("工程另存为…") { if selection == .emark { emark.save(asNew: true) } else { picture.save(asNew: true) } }.keyboardShortcut("s", modifiers: [.command, .shift]).disabled(store.isBusy || selection == .firmware || selection == .monitor)
+                    .keyboardShortcut("o").disabled(store.isBusy || store.tutorialGate.presented != nil)
+                Button("保存工程") { if selection == .emark { emark.save() } else { picture.save() } }.keyboardShortcut("s").disabled(store.isBusy || store.tutorialGate.presented != nil || selection == .firmware || selection == .monitor)
+                Button("工程另存为…") { if selection == .emark { emark.save(asNew: true) } else { picture.save(asNew: true) } }.keyboardShortcut("s", modifiers: [.command, .shift]).disabled(store.isBusy || store.tutorialGate.presented != nil || selection == .firmware || selection == .monitor)
                 Button("刷新设备") { store.refreshDevices() }
-                    .keyboardShortcut("r").disabled(store.isBusy)
+                    .keyboardShortcut("r").disabled(store.isBusy || store.tutorialGate.presented != nil)
             }
             CommandGroup(replacing: .undoRedo) {
-                Button("撤销编辑") { if selection == .emark { emark.undo() } else { picture.undo() } }.keyboardShortcut("z").disabled(store.isBusy || selection == .firmware || selection == .monitor || (selection == .emark ? !emark.undoAvailable : !picture.undoAvailable))
-                Button("重做编辑") { if selection == .emark { emark.redo() } else { picture.redo() } }.keyboardShortcut("z", modifiers: [.command, .shift]).disabled(store.isBusy || selection == .firmware || selection == .monitor || (selection == .emark ? !emark.redoAvailable : !picture.redoAvailable))
+                Button("撤销编辑") { if selection == .emark { emark.undo() } else { picture.undo() } }.keyboardShortcut("z").disabled(store.isBusy || store.tutorialGate.presented != nil || selection == .firmware || selection == .monitor || (selection == .emark ? !emark.undoAvailable : !picture.undoAvailable))
+                Button("重做编辑") { if selection == .emark { emark.redo() } else { picture.redo() } }.keyboardShortcut("z", modifiers: [.command, .shift]).disabled(store.isBusy || store.tutorialGate.presented != nil || selection == .firmware || selection == .monitor || (selection == .emark ? !emark.redoAvailable : !picture.redoAvailable))
             }
         }
     }

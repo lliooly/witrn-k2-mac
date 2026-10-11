@@ -7,6 +7,10 @@ public struct EmarkBank: Equatable, Sendable {
     public init(data: Data) throws {
         let b = [UInt8](data)
         guard b.count == Self.size else { throw PictureError.invalid("E-Mark 配置集合长度必须是 666 字节") }
+        if (b.prefix(4).allSatisfy { $0 == 0 } || b.prefix(4).allSatisfy { $0 == 255 }),
+           b.dropFirst(4).allSatisfy({ $0 == 255 }) {
+            throw PictureError.invalid("设备尚未保存自定义 E-Mark 配置。内置档位不在本次读取范围内。可导入 .wtemark 或点 + 新增配置，再备份并写入。")
+        }
         let count = Int(b[5]), selected = Int(b[4])
         guard count <= Self.capacity, (count == 0 ? selected == 0 : selected < count) else { throw PictureError.invalid("配置数量或默认组无效") }
         for i in 0..<count { _ = try EmarkRecord(data: Data(b[(6 + i * 66)..<(72 + i * 66)])) }
@@ -45,9 +49,12 @@ public struct EmarkBank: Equatable, Sendable {
     public static var empty: EmarkBank {
         var b = Data(repeating: 255, count: size); b[4] = 0; b[5] = 0; return try! EmarkBank(data: b)
     }
-    public func encoded() throws -> Data {
+    public func encoded(name: String? = nil) throws -> Data {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(EmarkProject(schema: 1, type: "k2-emark-project", bank: data))
+        return try encoder.encode(EmarkProject(schema: 1, type: "k2-emark-project", bank: data, name: name))
+    }
+    public static func projectName(in data: Data) throws -> String? {
+        try JSONDecoder().decode(EmarkProject.self, from: data).name
     }
     public static func decode(_ data: Data) throws -> EmarkBank {
         guard data.count <= 65536 else { throw PictureError.invalid("E-Mark 工程过大") }
@@ -57,4 +64,4 @@ public struct EmarkBank: Equatable, Sendable {
     }
 }
 
-private struct EmarkProject: Codable { let schema: Int; let type: String; let bank: Data }
+private struct EmarkProject: Codable { let schema: Int; let type: String; let bank: Data; let name: String? }

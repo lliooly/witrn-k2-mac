@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 协议与逆向研究
+    url: https://github.com/lliooly/WITRN-K2-REVERSE
+    about: HID、DFU、文件格式与开发接口请先查看研究仓库。
+  - name: 安全问题报告
+    url: https://github.com/lliooly/witrn-k2-mac/blob/main/SECURITY.md
+    about: 安全漏洞请使用私密渠道，勿公开设备数据或可利用细节。

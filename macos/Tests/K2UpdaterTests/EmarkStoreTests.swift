@@ -3,6 +3,28 @@ import XCTest
 import K2Core
 
 final class EmarkStoreTests: XCTestCase {
+    @MainActor func testProjectNamePersistsAndLegacyProjectsUseFilename() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("旧工程.k2emark")
+        try EmarkBank.empty.encoded().write(to: url)
+        let store = EmarkStore()
+        store.open(url)
+        XCTAssertEqual(store.projectName, "旧工程")
+        store.renameProject("  我的测试工程  ")
+        XCTAssertTrue(store.dirty)
+        XCTAssertTrue(store.save())
+        XCTAssertFalse(store.dirty)
+        let reopened = EmarkStore()
+        reopened.open(url)
+        XCTAssertEqual(reopened.projectName, "我的测试工程")
+        XCTAssertEqual(reopened.bank, store.bank)
+        reopened.renameProject("  ")
+        XCTAssertEqual(reopened.projectName, "我的测试工程")
+        XCTAssertFalse(reopened.dirty)
+    }
+
     @MainActor func testInvalidDraftPreservesBankAndBlocksSave() async throws {
         let store = EmarkStore(); store.add()
         let before = store.bank, group = UUID()

@@ -66,7 +66,7 @@ def main():
         shutil.copy2(icon, resources / icon.name)
     info = {
         "CFBundleExecutable": "K2Updater", "CFBundleIdentifier": "dev.witrn.k2updater",
-        "CFBundleName": "K2 Updater", "CFBundleDisplayName": "WITRN K2",
+        "CFBundleName": "K2 Updater", "CFBundleDisplayName": "维简 Mac",
         "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.7.1",
         "CFBundleVersion": "10", "LSMinimumSystemVersion": "13.0",
         "NSPrincipalClass": "NSApplication", "NSHighResolutionCapable": True,

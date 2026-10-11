@@ -15,6 +15,20 @@ struct ResourceWriteIntent: Identifiable {
 
 @MainActor
 final class UpdaterStore: ObservableObject {
+    @Published private(set) var tutorialGate = ResourceTutorialGate()
+    func openResourceTutorial(_ kind: ResourceTutorialKind) { tutorialGate.open(kind) }
+    func cancelResourceTutorial() { tutorialGate.cancel() }
+    func confirmResourceTutorial() { _ = tutorialGate.confirm() }
+    func hasReadTutorial(for resource: PictureResource) -> Bool { tutorialGate.allows(resource) }
+    @Published private(set) var dialWriteSequence = DialWriteSequence()
+    private var pendingResourceWrite: (kind: PictureResource, device: String)?
+    private var resourceDeviceKey: String { selectedPath + "|" + (selectedDevice?.serialNumber ?? "") }
+    func canWriteResource(_ kind: PictureResource, usesDialBackground: Bool = true) -> Bool {
+        canUseResources && hasReadTutorial(for: kind) && dialWriteSequence.allows(kind, device: resourceDeviceKey, usesBackground: usesDialBackground)
+    }
+    func canWriteDialLayoutInSequence(usesBackground: Bool) -> Bool {
+        dialWriteSequence.allows(.layout, device: resourceDeviceKey, usesBackground: usesBackground)
+    }
     @Published var dfuConfirmed = false
     @Published var devices: [DeviceInfo] = []
     @Published var selectedPath = ""
@@ -137,8 +151,19 @@ final class UpdaterStore: ObservableObject {
         resourceReadResult = receive
         run(.resourceRead, resource: kind)
     }
-    func writeResource(_ intent: ResourceWriteIntent) {
-        guard canUseResources else { return }
+    func writeResource(_ intent: ResourceWriteIntent, usesDialBackground: Bool = true) {
+        guard hasReadTutorial(for: intent.kind) else {
+            if let kind = ResourceTutorialKind.forResource(intent.kind) { openResourceTutorial(kind) }
+            return
+        }
+        guard canWriteResource(intent.kind, usesDialBackground: usesDialBackground) else {
+            if canUseResources && !canWriteDialLayoutInSequence(usesBackground: usesDialBackground) && intent.kind == .layout {
+                errorMessage = "请先成功写入表盘背景，再重新进入 DFU 写入布局。"
+            } else if canUseResources && intent.kind == .background && !usesDialBackground {
+                errorMessage = "请先勾选「使用背景」，再写入表盘背景。"
+            }
+            return
+        }
         do {
             if let manifest = intent.manifest {
                 run(.resourceRestore, confirmed: true, resource: intent.kind, payload: manifest, digest: intent.manifestHash)
@@ -189,6 +214,10 @@ final class UpdaterStore: ObservableObject {
         else { request.resourcePath = payload?.path; request.resourceSha256 = digest }
         if action != .devices && action != .inspect && action != .firmwareExtract { tracePath = nil; backupPath = nil }
         if action == .backup || action == .upgrade { firmwareTaskTracePath = nil }
+        if (action == .resourceWrite || action == .resourceRestore), let resource {
+            pendingResourceWrite = (resource, resourceDeviceKey)
+            dialWriteSequence.started(resource)
+        }
         operation = action; isBusy = true; receivedError = false; pendingResult = nil
         errorMessage = nil; successful = false; stage = "preflight"; current = 0; total = 0
         firmwareProgressPhase = .firstBackup
@@ -228,7 +257,7 @@ final class UpdaterStore: ObservableObject {
     }
 
     private func finish(_ code: Int32, _ error: Error?) {
-        defer { isBusy = false; operation = nil; resourceReadResult = nil; pendingFirmwareStep = nil }
+        defer { isBusy = false; operation = nil; resourceReadResult = nil; pendingFirmwareStep = nil; pendingResourceWrite = nil }
         if let error { errorMessage = error.localizedDescription; receivedError = true }
         guard code == 0, !receivedError, let value = pendingResult else {
             if code != 130 && errorMessage == nil { errorMessage = "后台未正常完成（退出码 \(code)）" }
@@ -267,6 +296,7 @@ final class UpdaterStore: ObservableObject {
                 status = "固件 \(firmware?.version ?? "") 已写入并校验，请重新上电确认"
                 successful = true
                 firmwareWizardStep = 3
+                dialWriteSequence.reset()
                 identity = nil; dfuConfirmed = false
             case .resourceRead:
                 backupPath = value["backup"]?["directory"]?.string
@@ -280,8 +310,17 @@ final class UpdaterStore: ObservableObject {
                     errorMessage = value["resource_error"]?.string ?? "设备尚未设置有效资源"
                 }
             case .resourceWrite, .resourceRestore:
+                guard let written = pendingResourceWrite,
+                      value["resource_kind"]?.string == written.kind.rawValue else {
+                    identity = nil; dfuConfirmed = false
+                    throw PictureError.invalid("后台写入结果与请求资源不一致")
+                }
+                dialWriteSequence.completed(written.kind, device: written.device, succeeded: true)
                 backupPath = value["backup"]?["directory"]?.string
-                status = "资源已写入，完整扇区读回一致。请重新上电确认。"; successful = true
+                status = written.kind == .background
+                    ? "表盘背景已写入并校验，请重新进入 DFU 后写入表盘布局。"
+                    : "资源已写入，完整扇区读回一致。请重新上电确认。"
+                successful = true
                 identity = nil; dfuConfirmed = false
             default: break
             }

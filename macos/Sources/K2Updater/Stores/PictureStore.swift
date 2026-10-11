@@ -20,6 +20,13 @@ final class PictureStore: ObservableObject {
     private var gestureStart: PictureProject?
     private var lastEditGroup: UUID?
     var element: DialElement { project.layout.element(selectedElement) }
+    var projectName: String { project.name ?? projectURL?.deletingPathExtension().lastPathComponent ?? "我的 K2 工程" }
+
+    func renameProject(_ name: String) {
+        let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty, cleaned != projectName else { return }
+        edit { $0.name = cleaned }
+    }
 
     func edit(coalescing group: UUID? = nil, _ body: (inout PictureProject) throws -> Void) {
         do {
@@ -94,7 +101,7 @@ final class PictureStore: ObservableObject {
     @discardableResult func save(asNew: Bool = false) -> Bool {
         var target = asNew ? nil : projectURL
         if target == nil {
-            let panel = NSSavePanel(); panel.nameFieldStringValue = "我的 K2 表盘.k2project"
+            let panel = NSSavePanel(); panel.nameFieldStringValue = projectName.replacingOccurrences(of: "/", with: "-") + ".k2project"
             panel.allowedContentTypes = [UTType(filenameExtension: "k2project") ?? .data]
             guard panel.runModal() == .OK else { return false }; target = panel.url
         }
@@ -119,7 +126,7 @@ final class PictureStore: ObservableObject {
         catch { self.error = error.localizedDescription }
     }
     func applyImage(_ image: PixelImage, kind: PictureResource) {
-        edit { if kind == .startup { $0.startup = image } else { $0.background = image } }; imageImport = nil
+        edit { if kind == .startup { $0.startup = image } else { $0.background = image; $0.useBackground = true } }; imageImport = nil
     }
     func image(_ kind: PictureResource) throws -> PixelImage {
         guard let image = kind == .startup ? project.startup : project.background else { throw PictureError.invalid("请先选择\(kind.title)") }; return image

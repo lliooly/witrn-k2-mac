@@ -38,6 +38,14 @@ struct ContentView: View {
             workspaceColumn.ignoresSafeArea(edges: .top)
         }
         .frame(minWidth: 1100, minHeight: 720)
+        .blur(radius: store.tutorialGate.presented == nil ? 0 : 8)
+        .allowsHitTesting(store.tutorialGate.presented == nil)
+        .accessibilityHidden(store.tutorialGate.presented != nil)
+        .overlay {
+            if let kind = store.tutorialGate.presented {
+                ResourceTutorialOverlay(store: store, kind: kind, usesBackground: picture.project.usesBackground)
+            }
+        }
         .task { store.checkDevicePresence() }
         .onReceive(Timer.publish(every: 0.75, on: .main, in: .common).autoconnect()) { _ in
             store.checkDevicePresence()
@@ -45,7 +53,7 @@ struct ContentView: View {
         .navigationTitle(section.rawValue)
         .alert("恢复\(restoreIntent?.kind.title ?? "资源")备份？", isPresented: Binding(get: { restoreIntent != nil }, set: { if !$0 { restoreIntent = nil } })) {
             Button("取消", role: .cancel) { restoreIntent = nil }
-            Button("备份并恢复") { if let intent = restoreIntent { store.writeResource(intent) }; restoreIntent = nil }
+            Button("备份并恢复") { if let intent = restoreIntent { store.writeResource(intent, usesDialBackground: picture.project.usesBackground) }; restoreIntent = nil }
         } message: {
             Text("恢复到备份中的完整资源扇区。后台会核对备份摘要和设备身份，先双遍备份当前数据，再擦写和完整读回校验。请保持连接")
         }
@@ -136,7 +144,7 @@ struct ContentView: View {
     private var connectionSidebar: some View {
         HStack(spacing: 0) {
             Divider()
-            ConnectionSidebar(updater: store, monitor: monitor, picture: picture, section: section)
+            ConnectionSidebar(updater: store, monitor: monitor, picture: picture, emark: emark, section: section)
                 .frame(width: LayoutMetrics.connectionSidebarWidth)
                 .clipped()
         }

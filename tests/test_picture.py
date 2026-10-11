@@ -68,6 +68,28 @@ class PictureTests(unittest.TestCase):
         data=bytearray(payload('layout'));data[224]=10
         with self.assertRaises(ValueError): resource_for('layout').validate(data)
 
+    def test_layout_only_write_does_not_require_or_modify_background(self):
+        background = resource_for('background')
+        layout = resource_for('layout')
+        for raw in (b'\xff' * background.allocation,
+                    bytes((i * 13) % 256 for i in range(background.allocation))):
+            with self.subTest(empty_background=raw[0] == 255), tempfile.TemporaryDirectory() as root:
+                transport, protocol, identity = connected()
+                offset = background.address - APP_START
+                transport.memory[offset:offset + background.allocation] = raw
+                before = bytes(transport.memory)
+                request = {'id': str(uuid.uuid4()), 'operation': 'resource-write',
+                           'resource_kind': 'layout', '_resource_bytes': payload('layout')}
+                transfer_resource(request, Events(request, io.StringIO()), protocol, identity, Path(root) / 'backup')
+                after = bytes(transport.memory)
+                start = layout.address - APP_START
+                self.assertEqual(after[:start], before[:start])
+                self.assertEqual(after[start + layout.allocation:], before[start + layout.allocation:])
+                self.assertEqual(after[offset:offset + background.allocation], raw)
+                self.assertEqual(after[start:start + layout.size], payload('layout'))
+                erased = [struct.unpack('<I', packet.payload)[0] for packet in transport.sent if packet.command == 8]
+                self.assertEqual(erased, list(layout.addresses))
+
     def test_all_resource_transfers_preserve_sector_padding_and_verify(self):
         for kind,r in RESOURCES.items():
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as root:

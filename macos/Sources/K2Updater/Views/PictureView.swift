@@ -7,77 +7,44 @@ struct PictureView: View {
     @ObservedObject var store: UpdaterStore
     let startup: Bool
     @SceneStorage("dialPreviewScale") private var scale = 1.5
-    @State private var writeIntent: ResourceWriteIntent?
     @State private var dropTarget = false
     var body: some View {
-        Group { if startup { startupEditor } else { dialEditor } }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        ScrollView {
+            Group { if startup { startupEditor } else { dialEditor } }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
         .disabled(store.isBusy)
         .sheet(item: $picture.imageImport) { ImageCropSheet(item: $0, picture: picture) }
-        .alert("\(writeIntent?.restoring == true ? "恢复" : "写入")\(writeIntent?.kind.title ?? "资源")？", isPresented: Binding(get: { writeIntent != nil }, set: { if !$0 { writeIntent = nil } })) {
-            Button("取消", role: .cancel) { writeIntent = nil }
-            Button("备份并\(writeIntent?.restoring == true ? "恢复" : "写入")") { if let intent = writeIntent { store.writeResource(intent) }; writeIntent = nil }
-        } message: {
-            Text("先读取目标资源的完整扇区两遍并保存备份，再擦除、写入并完整读回校验。仅操作\(writeIntent?.kind.title ?? "资源")。期间请保持连接")
-        }
         .alert("文件操作失败", isPresented: Binding(get: { picture.error != nil }, set: { if !$0 { picture.error = nil } })) {
             Button("好", role: .cancel) { picture.error = nil }
         } message: { Text(picture.error ?? "") }
         .onDrop(of: [.fileURL], isTargeted: $dropTarget, perform: acceptDrop)
         .overlay { if dropTarget { RoundedRectangle(cornerRadius: 8).stroke(.blue, lineWidth: 2).allowsHitTesting(false) } }
     }
-    private var dialEditor: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 20) {
-                dialPreview.frame(minWidth: 310, idealWidth: 352, maxWidth: .infinity)
-                DialElementTable(picture: picture).fixedSize(horizontal: true, vertical: false)
+    private var dialEditor: some View { DialEditorView(picture: picture, scale: $scale) }
+    private var startupEditor: some View {
+        VStack(spacing: 24) {
+            VStack(spacing: 6) {
+                HStack(spacing: 12) {
+                    Label("235 × 235", systemImage: "viewfinder")
+                        .font(.callout).foregroundStyle(.primary)
+                    Spacer()
+                    Button { picture.chooseImage(.startup) } label: {
+                        Label(picture.project.startup == nil ? "导入图片" : "替换图片", systemImage: "photo.badge.plus")
+                    }.buttonStyle(.bordered).buttonBorderShape(.roundedRectangle)
+                }.controlSize(.regular)
+                Text("支持 BMP、PNG 和 JPEG").font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            VStack(alignment: .leading, spacing: 20) {
-                dialPreview
-                DialElementTable(picture: picture)
+            startupPreview.frame(maxWidth: .infinity, alignment: .center)
+            if picture.project.startup != nil {
+                HStack(spacing: 12) {
+                    Button { picture.export(.startup) } label: { Label("导出 BMP", systemImage: "square.and.arrow.up") }
+                    Button { picture.edit { $0.startup = nil } } label: { Label("移除图片", systemImage: "trash") }
+                }.buttonStyle(.bordered)
             }
         }
-    }
-    private var dialPreview: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
-                Label("240 × 240", systemImage: "viewfinder").font(.callout).foregroundStyle(.secondary)
-                Spacer()
-                Picker("缩放", selection: $scale) {
-                    Text("100%").tag(1.0)
-                    Text("150%").tag(1.5)
-                    Text("200%").tag(2.0)
-                }.frame(width: 140)
-            }
-            ScrollView([.horizontal, .vertical]) {
-                DialCanvas(picture: picture, scale: scale).padding(6)
-            }.frame(minHeight: 390, idealHeight: 400)
-            Text("点击选择，拖动定位，方向键微调 1 像素")
-                .font(.callout).foregroundStyle(.secondary)
-            HStack(spacing: 10) {
-                Button { picture.chooseImage(.background) } label: {
-                    Label("导入背景", systemImage: "photo.badge.plus")
-                }.buttonStyle(.borderedProminent)
-                Menu {
-                    Button { picture.edit { $0.background = nil } } label: {
-                        Label("移除背景", systemImage: "trash")
-                    }.disabled(picture.project.background == nil)
-                    Button { picture.export(.background) } label: {
-                        Label("导出 BMP", systemImage: "square.and.arrow.up")
-                    }.disabled(picture.project.background == nil)
-                } label: {
-                    Label("背景操作", systemImage: "ellipsis.circle")
-                }
-                Spacer()
-            }
-        }.frame(maxWidth: .infinity)
-    }
-    private var startupEditor: some View {
-        HStack(alignment: .top, spacing: 24) {
-            startupPreview
-            startupImageActions.frame(minWidth: 200)
-        }.padding(.vertical, 12)
     }
     private var startupPreview: some View {
         ZStack {
@@ -85,27 +52,6 @@ struct PictureView: View {
             if let image = picture.project.startup?.cgImage { Image(decorative: image, scale: 1).resizable().interpolation(.none) }
             else { Text("导入一张开机图").foregroundStyle(.white.opacity(0.65)) }
         }.frame(width: 352.5, height: 352.5)
-    }
-    private var startupImageActions: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("235 × 235 像素").font(.title3.weight(.semibold))
-                Text("支持 BMP、PNG 和 JPEG。导入时调整裁剪或缩放，确认后保存到工程").foregroundStyle(.secondary).font(.callout)
-            }
-            Button { picture.chooseImage(.startup) } label: {
-                Label(picture.project.startup == nil ? "导入图片" : "替换图片", systemImage: "photo.badge.plus")
-            }.buttonStyle(.borderedProminent).controlSize(.large)
-            Menu {
-                Button { picture.export(.startup) } label: {
-                    Label("导出 BMP", systemImage: "square.and.arrow.up")
-                }.disabled(picture.project.startup == nil)
-                Button { picture.edit { $0.startup = nil } } label: {
-                    Label("移除图片", systemImage: "trash")
-                }.disabled(picture.project.startup == nil)
-            } label: {
-                Label("图片操作", systemImage: "ellipsis.circle")
-            }
-        }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private func acceptDrop(_ providers: [NSItemProvider]) -> Bool {
         guard !store.isBusy, let provider = providers.first else { return false }
@@ -119,5 +65,44 @@ struct PictureView: View {
             }
         }
         return true
+    }
+}
+
+struct DialEditorView: View {
+    @ObservedObject var picture: PictureStore
+    @Binding var scale: Double
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(spacing: 10) {
+                Label("240 × 240", systemImage: "viewfinder")
+                    .font(.callout).foregroundStyle(.primary)
+                Spacer(minLength: 12)
+                Toggle("使用背景", isOn: Binding(
+                    get: { picture.project.usesBackground },
+                    set: { enabled in picture.edit { $0.useBackground = enabled } }
+                )).toggleStyle(.checkbox).fixedSize()
+                    .help("勾选后先写入背景再写布局；取消勾选可直接写布局")
+                Button { picture.chooseImage(.background) } label: {
+                    Label("导入背景", systemImage: "photo.badge.plus")
+                }.buttonStyle(.bordered).disabled(!picture.project.usesBackground)
+                Menu {
+                    Button { picture.edit { $0.background = nil } } label: {
+                        Label("移除背景", systemImage: "trash")
+                    }.disabled(picture.project.background == nil)
+                    Button { picture.export(.background) } label: {
+                        Label("导出 BMP", systemImage: "square.and.arrow.up")
+                    }.disabled(picture.project.background == nil)
+                } label: { Label("背景操作", systemImage: "ellipsis.circle") }
+                Picker("缩放", selection: $scale) {
+                    Text("100%").tag(1.0)
+                    Text("150%").tag(1.5)
+                    Text("200%").tag(2.0)
+                }.frame(width: 110)
+            }.controlSize(.regular)
+            DialCanvas(picture: picture, scale: scale)
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .center)
+            DialElementTable(picture: picture)
+        }
     }
 }

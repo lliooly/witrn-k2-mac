@@ -2,6 +2,21 @@ import XCTest
 @testable import K2Core
 
 final class EmarkTests: XCTestCase {
+    func testUninitializedBankIsDistinctFromCorruptionAndValidEmptyBank() throws {
+        for header: UInt8 in [0, 255] {
+            var raw = Data(repeating: 255, count: EmarkBank.size)
+            raw.replaceSubrange(0..<4, with: Data(repeating: header, count: 4))
+            XCTAssertThrowsError(try EmarkBank(data: raw)) { error in
+                XCTAssertTrue(error.localizedDescription.contains("设备尚未保存自定义 E-Mark 配置。内置档位不在本次读取范围内"))
+            }
+            raw[6] = 0
+            XCTAssertThrowsError(try EmarkBank(data: raw)) { error in
+                XCTAssertTrue(error.localizedDescription.contains("配置数量或默认组无效"))
+            }
+        }
+        XCTAssertEqual(try EmarkBank(data: EmarkBank.empty.data).count, 0)
+    }
+
     func testExactRecordOffsetsAndIndependentChecksum() throws {
         var r = EmarkRecord.standard; try r.setName("Cable A")
         try r.setWord(25, 0x11223344); try r.setWord(61, 0x55667788)

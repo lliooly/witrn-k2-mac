@@ -24,7 +24,7 @@ struct DialCanvas: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             Color.black
-            if let image = picture.project.background?.cgImage {
+            if picture.project.usesBackground, let image = picture.project.background?.cgImage {
                 Image(decorative: image, scale: 1).resizable().frame(width: 240, height: 240)
             }
             ForEach(picture.project.layout.elements.filter { $0.enabled == 1 }) { element in

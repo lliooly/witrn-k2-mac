@@ -1,3 +1,5 @@
+> 项目现名为「维简 Mac · WITRN K2」，当前打包版本为 0.7.1。下文版本小节保留对应阶段的历史验证结果；最新入口见 [README](../README.md)、[快速开始](quick-start.md) 和 [更新日志](../CHANGELOG.md)。应用显示名已更新，构建路径、Bundle ID 与本地数据目录沿用原名。
+
 # macOS 图形版
 
 K2 Updater 使用 SwiftUI 窗口和已验证的 Python 升级核心。Python、HIDAPI 和协议查表数据随 `.app` 一起打包；运行应用不需要终端、Python 安装或开发环境。应用不包含官方固件。
@@ -59,6 +61,10 @@ K2 Updater 使用 SwiftUI 窗口和已验证的 Python 升级核心。Python、H
 
 写入完成后重新上电，在 K2 菜单选择虚拟 E-Mark 和对应组。参数不会改变线材实际电气能力，设备开关和私有加密认证没有远程操作入口。静态证据及验证边界见 [E-Mark 分析](../reverse/K2EMARK.md)。
 
+首次读取若配置区尚未初始化（头部为全零或全 FF，其余 662 字节全 FF），提示「设备尚未保存自定义 E-Mark 配置。内置档位不在本次读取范围内」，保留原始备份和本地工程。可以从「文件」菜单导入 `.wtemark`，或点 + 新增配置，设置名称、身份参数及默认组，再点击「备份并写入配置」。其他数量／默认组越界仍报告格式错误；不会自动修复或写回设备。
+
+自定义集合为空不代表 K2 没有内置虚拟 E-Mark。按[厂商 K2 说明书](https://www.witrn.com/?p=2105)，进入快充检测／PD 诱骗前可选择 OFF、inbuilt emark（内置 240W：50V、5A、PD3.1 EPR）或 copied emark。复制档位的数据来自设备 E-Mark 检测页长按 OK 的复制操作，本应用「读取复制数据」只读取已经复制的内容。普通测量建议 OFF 并使用原装带芯片线；虚拟身份与实体线的 E-Mark 可能冲突，且不能代替私有加密认证，也不能提高实际线材的承载能力。
+
 ## 曲线与记录（0.5.0）
 
 侧栏「上位机」提供曲线与记录。正常开机后连接 CC1/HID 口，不按减号进入 DFU；选择接口后连接即可预览。开始记录选择新 SQLite 文件，暂停仍可查看实时数据，停止或退出前提交记录。采集占用期间设备维护操作被阻止，本地表盘和 E-Mark 编辑仍可使用。
@@ -67,7 +73,7 @@ K2 Updater 使用 SwiftUI 窗口和已验证的 Python 升级核心。Python、H
 
 ## 本地构建
 
-需要 Xcode 命令行工具、支持目标架构的 Python 3.9 和依赖安装环境。目前构建脚本使用 Python 3.9；Universal 2 构建还要求 Python 解释器及标准库扩展包含两个架构。当前机器的 Xcode 内置 Python 满足这一点，其他机器应先检查自己的解释器。
+需要 Xcode 26 或更新版本及 macOS 26+ SDK、支持目标架构的 Python 3.9 和依赖安装环境。新系统 API 按版本保护，运行目标仍为 macOS 13+。目前构建脚本使用 Python 3.9；Universal 2 构建还要求 Python 解释器及标准库扩展包含两个架构。当前机器的 Xcode 内置 Python 满足这一点，其他机器应先检查自己的解释器。
 
 ```sh
 python3.9 -m venv .venv-app
@@ -108,3 +114,11 @@ swift test --package-path macos --disable-sandbox \
 0.5.1 接入普通模式 K2 5.8 实测：被动采集、暂停／继续、自动停止、三种格式交换通过；修正 100 样本每秒档的 USB 时间抖动采样漂移，并启用实机确认的遥测双校验。70 项 Python 检查通过；新版移动后台在 arm64／x86_64 下通过既有回归，49 个 Mach-O 双架构及本地签名通过。Swift 界面代码未修改。无负载和正常充电负载读数已对照；USB 电流符号保留。反向接线、长达一天采集、官方 Windows 文件往返及完整窗口操作仍未验收。详见[实机验证记录](k2-monitor-hardware-validation.md)。
 
 未来公开分发时再补充 Developer ID、公证及真实 Intel / 旧系统验证。应用包内附项目许可、NOTICE 和 Python、HIDAPI、PyInstaller 许可文本。
+
+### 教程截图与操作标注
+
+表盘、开机图、虚拟 E-Mark 教程首屏顶部均附当前应用的界面截图，橙色框与编号直接对应原有教程步骤，同一步可标记多个操作区域，不另设一套说明。点击截图或「放大查看」可打开大图，点击「关闭」或按 Esc 返回教程。表盘说明按「使用背景」区分先写背景再写布局和仅写布局。
+
+截图保存在 `macos/Sources/K2Updater/Resources/Tutorials/`，随应用离线打包；来自实际 SwiftUI 页面在未连接设备时的渲染，不表示设备已经识别或写入成功。标注由 `TutorialScreenshot` 按最终裁剪图片的像素坐标绘制，图片与标注共用固定宽高比画布，放大时保持清晰。更新界面后，可设置 `K2_TUTORIAL_CAPTURE_DIR` 为上述资源目录，运行 `UISnapshotHarness/testCaptureTutorialSources` 重新截图，再构建以更新资源包；设置 `K2_SNAPSHOT_DIR` 并运行 `UISnapshotHarness/testRenderAnnotatedTutorials` 可检查浅色和深色下的标注效果。截图不包含设备写入或网络操作。
+
+教程卡片最大宽度 1120、高度 840，正文不滚动；较矮窗口会选择较小的截图预览，仍可点击放大。取消和确认按钮在 macOS 26 及更新系统使用原生 `.glass` / `.glassProminent` 样式，交互反馈与辅助功能行为交由系统处理；旧系统使用原生 bordered 样式。阅读倒计时期间确认按钮保持禁用。

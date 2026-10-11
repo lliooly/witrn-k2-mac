@@ -53,6 +53,35 @@ struct SystemGlassSurface: ViewModifier {
     }
 }
 
+/// Let AppKit create the same native split-sidebar backing used on the left.
+/// Keep it behind the SwiftUI content so layout and interactions stay unchanged.
+struct SystemSidebarSurface: ViewModifier {
+    func body(content: Content) -> some View {
+        content.background {
+            NativeSidebarBackground()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
+        }
+    }
+}
+
+private struct NativeSidebarBackground: NSViewControllerRepresentable {
+    func makeNSViewController(context: Context) -> NSSplitViewController {
+        let controller = NSSplitViewController()
+        controller.splitView.isVertical = true
+        let backing = NSViewController()
+        backing.view = NSView()
+        let item = NSSplitViewItem(sidebarWithViewController: backing)
+        item.canCollapse = false
+        item.minimumThickness = LayoutMetrics.connectionSidebarWidth
+        item.maximumThickness = LayoutMetrics.connectionSidebarWidth
+        item.allowsFullHeightLayout = true
+        controller.addSplitViewItem(item)
+        return controller
+    }
+    func updateNSViewController(_ controller: NSSplitViewController, context: Context) {}
+}
+
 /// AppKit's native Liquid Glass surface, used for full-width system-like bars.
 /// SwiftUI's `glassEffect` is still used for compact custom controls below.
 @available(macOS 26.0, *)
@@ -89,6 +118,50 @@ struct SystemGlassToolbarButtonSurface: ViewModifier {
         } else {
             content.background(.regularMaterial, in: Circle())
         }
+    }
+}
+
+struct EditorCapsuleSurface: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: Capsule())
+        } else {
+            content.background(.regularMaterial, in: Capsule())
+        }
+    }
+}
+
+struct EditorIconLabel: View {
+    let symbol: String
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: LayoutMetrics.toolbarActionIconSize, weight: .medium))
+            .frame(width: LayoutMetrics.toolbarActionHitSize, height: LayoutMetrics.toolbarActionHitSize)
+            .contentShape(Rectangle())
+    }
+}
+
+/// Keep the menu icon and its explicit indicator inside one glass capsule.
+struct EditorIconMenuSurface: ViewModifier {
+    let symbol: String
+    var showsIndicator = false
+    private var width: CGFloat { LayoutMetrics.toolbarActionHitSize + (showsIndicator ? 16 : 0) }
+    func body(content: Content) -> some View {
+        content.frame(width: width, height: LayoutMetrics.toolbarActionHitSize)
+            .contentShape(Capsule()).buttonStyle(.plain)
+            .overlay {
+                EditorIconLabel(symbol: symbol)
+                    .offset(x: showsIndicator ? -8 : 0)
+                    .allowsHitTesting(false)
+            }
+            .overlay(alignment: .trailing) {
+                if showsIndicator {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .padding(.trailing, 9).allowsHitTesting(false)
+                }
+            }
+            .modifier(EditorCapsuleSurface())
     }
 }
 

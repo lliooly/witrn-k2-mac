@@ -20,11 +20,15 @@ struct WorkspaceToolbar: View {
     var usesScrollEdge = false
     @GestureState private var maintenancePressed = false
     @State private var connectionPressed = false
+    @State private var nameDraft = ""
+    @FocusState private var editingName: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    private var actionColor: Color { colorScheme == .dark ? .white : .black }
     private var toolbarActionPressed: Bool { maintenancePressed || connectionPressed }
 
     private var editor: Bool { section == .dial || section == .startup || section == .emark }
     private var isEmark: Bool { section == .emark }
-    private var dirty: Bool { isEmark ? emark.dirty || !emark.invalidFields.isEmpty : picture.dirty }
+    private var dirty: Bool { isEmark ? emark.dirty || emark.projectURL == nil || !emark.invalidFields.isEmpty : picture.dirty || picture.projectURL == nil }
 
     private var subtitle: String {
         if editor {
@@ -34,6 +38,14 @@ struct WorkspaceToolbar: View {
     }
 
     var body: some View {
+        Group {
+            if section == .emark { emarkToolbar }
+            else if section == .dial || section == .startup { pictureToolbar }
+            else { standardToolbar }
+        }
+    }
+
+    private var standardToolbar: some View {
         HStack(spacing: 14) {
             // The navigation sidebar folds away with its own toggle, so while it
             // is collapsed the top bar keeps a compact way back — placed clear of
@@ -73,6 +85,183 @@ struct WorkspaceToolbar: View {
         .padding(.vertical, 10)
         .modifier(SystemGlassSurface(active: !usesScrollEdge))
         .disabled(store.isBusy)
+    }
+
+    private var emarkToolbar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                emarkHeading
+                Spacer(minLength: 8)
+                emarkActions
+                toolbarActionGroup
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    emarkHeading
+                    Spacer(minLength: 8)
+                    toolbarActionGroup
+                }
+                HStack { emarkActions; Spacer(minLength: 0) }
+            }
+        }
+        .padding(.horizontal, 20).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(SystemGlassSurface(active: !usesScrollEdge))
+        .disabled(store.isBusy)
+        .onAppear { nameDraft = emark.projectName }
+        .onChange(of: emark.projectName) { nameDraft = $0 }
+        .onChange(of: editingName) { active in if !active { commitEmarkName() } }
+    }
+
+    private func commitEmarkName() {
+        emark.renameProject(nameDraft)
+        nameDraft = emark.projectName
+    }
+
+    private var emarkHeading: some View {
+        HStack(spacing: 10) {
+            if !sidebarExpanded {
+                NavigationSidebarToggle(expanded: $sidebarExpanded, size: LayoutMetrics.navigationSidebarToggleSize)
+                    .padding(.leading, LayoutMetrics.trafficLightTrailing - LayoutMetrics.pagePadding)
+            }
+            Text(section.rawValue).font(.title3.weight(.semibold)).fixedSize()
+            TextField("工程名称", text: $nameDraft)
+                .textFieldStyle(.plain).font(.callout)
+                .focused($editingName).onSubmit { commitEmarkName(); editingName = false }
+                .accessibilityLabel("工程名称").help("点击修改工程名称")
+                .padding(.horizontal, 9).padding(.vertical, 6)
+                .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 7))
+                .frame(width: 110)
+            saveState.fixedSize()
+        }
+    }
+
+    @ViewBuilder private var emarkActions: some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: 8) { emarkActionButtons }
+        } else { emarkActionButtons }
+    }
+
+    private var emarkActionButtons: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 0) {
+                pictureAction("新建", symbol: "doc.badge.plus") { commitEmarkName(); emark.newProject() }
+                capsuleDivider
+                pictureAction("打开", symbol: "folder") { commitEmarkName(); emark.open() }
+                capsuleDivider
+                pictureAction("另存为", symbol: "square.and.arrow.down.on.square") { commitEmarkName(); emark.save(asNew: true) }
+            }.foregroundStyle(actionColor).modifier(EditorCapsuleSurface())
+            ToolbarExportMenu(items: [
+                ToolbarExportMenuItem(title: "导出配置 .wtemark", enabled: emark.record != nil && emark.invalidFields.isEmpty) { emark.export() }
+            ])
+            .modifier(EditorIconMenuSurface(symbol: "square.and.arrow.up", showsIndicator: true))
+            .help("导出").accessibilityLabel("导出")
+            pictureAction("保存", symbol: "square.and.arrow.down") { commitEmarkName(); emark.save() }
+                .modifier(SystemGlassToolbarButtonSurface())
+            HStack(spacing: 0) {
+                pictureAction("撤销", symbol: "arrow.uturn.backward") { emark.undo() }
+                    .disabled(!emark.undoAvailable)
+                capsuleDivider
+                pictureAction("重做", symbol: "arrow.uturn.forward") { emark.redo() }
+                    .disabled(!emark.redoAvailable)
+            }.foregroundStyle(actionColor).modifier(EditorCapsuleSurface())
+        }.buttonStyle(.plain).font(.callout).fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var pictureToolbar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                pictureHeading
+                Spacer(minLength: 8)
+                pictureActions
+                toolbarActionGroup
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    pictureHeading
+                    Spacer(minLength: 8)
+                    toolbarActionGroup
+                }
+                HStack { pictureActions; Spacer(minLength: 0) }
+            }
+        }
+        .padding(.horizontal, 20).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(SystemGlassSurface(active: !usesScrollEdge))
+        .disabled(store.isBusy)
+        .onAppear { nameDraft = picture.projectName }
+        .onChange(of: picture.projectName) { name in nameDraft = name }
+        .onChange(of: editingName) { active in if !active { commitName() } }
+    }
+
+    private var pictureHeading: some View {
+        HStack(spacing: 10) {
+            if !sidebarExpanded {
+                NavigationSidebarToggle(expanded: $sidebarExpanded, size: LayoutMetrics.navigationSidebarToggleSize)
+                    .padding(.leading, LayoutMetrics.trafficLightTrailing - LayoutMetrics.pagePadding)
+            }
+            Text(section.rawValue).font(.title3.weight(.semibold)).fixedSize()
+            TextField("工程名称", text: $nameDraft)
+                .textFieldStyle(.plain).font(.callout)
+                .padding(.horizontal, 9).padding(.vertical, 6)
+                .background(.quaternary.opacity(editingName ? 0.6 : 0.3), in: RoundedRectangle(cornerRadius: 7))
+                .frame(width: 110).focused($editingName)
+                .onSubmit { commitName(); editingName = false }
+                .accessibilityLabel("工程名称").help("点击修改工程名称")
+            saveState.fixedSize()
+        }
+    }
+
+    private func commitName() {
+        picture.renameProject(nameDraft)
+        nameDraft = picture.projectName
+    }
+
+    @ViewBuilder private var pictureActions: some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: 8) { pictureActionButtons }
+        } else { pictureActionButtons }
+    }
+
+    private var pictureActionButtons: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 0) {
+                pictureAction("新建", symbol: "doc.badge.plus") { commitName(); picture.newProject() }
+                capsuleDivider
+                pictureAction("打开", symbol: "folder") { commitName(); picture.open() }
+                capsuleDivider
+                pictureAction("另存为", symbol: "square.and.arrow.down.on.square") { commitName(); picture.save(asNew: true) }
+            }.foregroundStyle(actionColor).modifier(EditorCapsuleSurface())
+            ToolbarExportMenu(items: pictureExportItems)
+            .modifier(EditorIconMenuSurface(symbol: "square.and.arrow.up", showsIndicator: true))
+            .help("导出").accessibilityLabel("导出")
+            pictureAction("保存", symbol: "square.and.arrow.down") { commitName(); picture.save() }
+                .modifier(SystemGlassToolbarButtonSurface())
+            HStack(spacing: 0) {
+                Button { picture.undo() } label: { EditorIconLabel(symbol: "arrow.uturn.backward") }
+                    .disabled(!picture.undoAvailable).help("撤销").accessibilityLabel("撤销")
+                capsuleDivider
+                Button { picture.redo() } label: { EditorIconLabel(symbol: "arrow.uturn.forward") }
+                    .disabled(!picture.redoAvailable).help("重做").accessibilityLabel("重做")
+            }.foregroundStyle(actionColor).modifier(EditorCapsuleSurface())
+        }.buttonStyle(.plain).font(.callout).fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var pictureExportItems: [ToolbarExportMenuItem] {
+        if section == .dial {
+            return [
+                ToolbarExportMenuItem(title: "导出布局 .pic") { picture.export(.layout) },
+                ToolbarExportMenuItem(title: "导出背景 BMP", enabled: picture.project.background != nil) { picture.export(.background) }
+            ]
+        }
+        return [ToolbarExportMenuItem(title: "导出开机图 BMP", enabled: picture.project.startup != nil) { picture.export(.startup) }]
+    }
+
+    private var capsuleDivider: some View { Divider().frame(height: 16) }
+    private func pictureAction(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            EditorIconLabel(symbol: symbol).foregroundStyle(actionColor)
+        }.help(title).accessibilityLabel(title)
     }
 
     private var saveState: some View {
@@ -149,13 +338,13 @@ struct WorkspaceToolbar: View {
     @ViewBuilder private var editorActions: some View {
         Menu("文件") {
             Button("新建工程") {
-                if isEmark { emark.newProject() } else { picture.newProject() }
+                if isEmark { commitEmarkName(); emark.newProject() } else { picture.newProject() }
             }
             Button("打开工程") {
-                if isEmark { emark.open() } else { picture.open() }
+                if isEmark { commitEmarkName(); emark.open() } else { picture.open() }
             }
             Button("另存为") {
-                if isEmark { emark.save(asNew: true) } else { picture.save(asNew: true) }
+                if isEmark { commitEmarkName(); emark.save(asNew: true) } else { picture.save(asNew: true) }
             }
             Divider()
             if isEmark {
@@ -174,7 +363,7 @@ struct WorkspaceToolbar: View {
         .fixedSize()
 
         Button("保存") {
-            if isEmark { emark.save() } else { picture.save() }
+            if isEmark { commitEmarkName(); emark.save() } else { picture.save() }
         }
 
         Button("↶") {

@@ -1,37 +1,39 @@
-name: Bug report
-description: Report a reproducible problem in the parser, simulator, or CLI.
+name: 问题反馈
+description: 报告应用、打包、记录或命令行的可复现问题。
 title: "[Bug]: "
 labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: |
-        Do not attach firmware, device backups, raw hardware logs, serial numbers, or private paths. Redact device-specific data before sharing.
+      value: 请勿上传固件、备份、原始通信日志、序列号或私人路径。截图和错误信息请先脱敏。
   - type: textarea
     id: summary
     attributes:
-      label: What happened?
-      description: Include the command and a redacted error message.
+      label: 发生了什么？
+      description: 描述预期与实际行为，附脱敏错误提示。
     validations:
       required: true
   - type: textarea
     id: reproduce
     attributes:
-      label: Steps to reproduce
-      description: Prefer synthetic or simulator-only reproduction steps.
+      label: 复现步骤
+      description: 注明所在页面或 CLI 命令，优先提供无设备的复现方式。
     validations:
       required: true
   - type: input
     id: environment
     attributes:
-      label: Environment
-      description: Python version, OS, and project revision.
+      label: 运行环境
+      description: 应用版本或提交、macOS 版本、Apple Silicon / Intel；CLI 问题另附 Python 版本。
     validations:
       required: true
+  - type: input
+    id: device
+    attributes:
+      label: 设备信息（如有关）
+      description: 仅填写型号、固件版本、普通 / DFU 模式，不要填写序列号。
   - type: textarea
     id: context
     attributes:
-      label: Additional context
-      description: Never include raw `.k2` files, backups, serial numbers, or unredacted HID traces.
-    validations:
-      required: false
+      label: 其他信息
+      description: 写入问题注明失败阶段与是否已有备份，勿上传备份内容。

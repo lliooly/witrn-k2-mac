@@ -8,6 +8,19 @@ import XCTest
 /// Set K2_SNAPSHOT_DIR to write PNGs; otherwise the test is a no-op.
 final class UISnapshotHarness: XCTestCase {
     @MainActor
+    func testRenderSidebarMaterials() throws {
+        guard let dir = ProcessInfo.processInfo.environment["K2_SNAPSHOT_DIR"] else { return }
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        for scheme: ColorScheme in [.light, .dark] {
+            applyAppearance(scheme)
+            render(ContentView(store: UpdaterStore(), picture: PictureStore(), emark: EmarkStore(),
+                               monitor: MonitorStore(), selection: .constant(.dial)),
+                   size: CGSize(width: 1280, height: 880), name: "sidebars-\(scheme)",
+                   scheme: scheme, dir: dir, nativeTitlebar: true)
+        }
+    }
+
+    @MainActor
     func testRenderWorkspaceScrollEdges() throws {
         guard let dir = ProcessInfo.processInfo.environment["K2_SNAPSHOT_DIR"] else { return }
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -128,6 +141,157 @@ final class UISnapshotHarness: XCTestCase {
     }
 
     @MainActor
+    func testRenderCustomZoomAndTutorials() throws {
+        guard let dir = ProcessInfo.processInfo.environment["K2_SNAPSHOT_DIR"] else { return }
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        applyAppearance(.dark)
+        for scale in [1.0, 1.5, 2.0] {
+            render(ScrollView { DialEditorView(picture: PictureStore(), scale: .constant(scale)).padding(20) },
+                   size: CGSize(width: 788, height: 1000), name: "dial-zoom-\(scale)",
+                   scheme: .dark, dir: dir)
+        }
+        for kind in ResourceTutorialKind.allCases {
+            for usesBackground in kind == .dial ? [false, true] : [false] {
+                let store = UpdaterStore()
+                let picture = PictureStore()
+                picture.edit { $0.useBackground = usesBackground }
+                store.openResourceTutorial(kind)
+                let name = "tutorial-\(kind)" + (usesBackground ? "-background" : "")
+                render(ContentView(store: store, picture: picture, emark: EmarkStore(), monitor: MonitorStore(),
+                                   selection: .constant(kind == .emark ? .emark : (kind == .dial ? .dial : .startup))),
+                       size: CGSize(width: 1280, height: 880), name: name,
+                       scheme: .dark, dir: dir, nativeTitlebar: true)
+                render(ContentView(store: store, picture: picture, emark: EmarkStore(), monitor: MonitorStore(),
+                                   selection: .constant(kind == .emark ? .emark : (kind == .dial ? .dial : .startup))),
+                       size: CGSize(width: 1280, height: 880), name: name + "-ready",
+                       scheme: .dark, dir: dir, nativeTitlebar: true, settleDelay: kind.readingSeconds + 0.5)
+            }
+        }
+    }
+
+    @MainActor
+    func testRenderBackgroundChoices() throws {
+        guard let dir = ProcessInfo.processInfo.environment["K2_SNAPSHOT_DIR"] else { return }
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let image = try PixelImage(width: 240, height: 240,
+                                  rgba: Data(Array(repeating: [UInt8(40), 70, 90, 255], count: 240 * 240).flatMap { $0 }))
+        for scheme: ColorScheme in [.light, .dark] {
+            applyAppearance(scheme)
+            let picture = PictureStore()
+            picture.applyImage(image, kind: .background)
+            for enabled in [true, false] {
+                picture.edit { $0.useBackground = enabled }
+                render(ScrollView { DialEditorView(picture: picture, scale: .constant(1.5)).padding(20) },
+                       size: CGSize(width: 788, height: 860), name: "background-\(scheme)-\(enabled)",
+                       scheme: scheme, dir: dir)
+            }
+        }
+    }
+
+    @MainActor
+    func testRenderLargeTutorialCards() throws {
+        guard let dir = ProcessInfo.processInfo.environment["K2_SNAPSHOT_DIR"] else { return }
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        for scheme: ColorScheme in [.light, .dark] {
+            applyAppearance(scheme)
+            for height: CGFloat in [720, 880] {
+                for kind in ResourceTutorialKind.allCases {
+                    for background in kind == .dial ? [false, true] : [false] {
+                        let store = UpdaterStore()
+                        store.openResourceTutorial(kind)
+                        render(ResourceTutorialOverlay(store: store, kind: kind, usesBackground: background),
+                               size: CGSize(width: height == 720 ? 1100 : 1280, height: height),
+                               name: "large-\(kind)-\(background)-\(scheme)-\(Int(height))",
+                               scheme: scheme, dir: dir)
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testRenderAnnotatedTutorials() throws {
+        guard let dir = ProcessInfo.processInfo.environment["K2_SNAPSHOT_DIR"] else { return }
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        for scheme: ColorScheme in [.light, .dark] {
+            applyAppearance(scheme)
+            for kind in ResourceTutorialKind.allCases {
+                render(TutorialScreenshot(kind: kind, usesBackground: true).annotatedImage.padding(24),
+                       size: CGSize(width: 1138, height: 1108), name: "annotation-detail-\(kind)-\(scheme)",
+                       scheme: scheme, dir: dir)
+                render(ScrollView { TutorialScreenshot(kind: kind, usesBackground: true).padding(24) },
+                       size: CGSize(width: 680, height: 900), name: "annotated-\(kind)-\(scheme)",
+                       scheme: scheme, dir: dir)
+            }
+        }
+    }
+
+    /// Rebuild bundled tutorial screenshots from the actual views, without device I/O.
+    @MainActor
+    func testCaptureTutorialSources() throws {
+        guard let dir = ProcessInfo.processInfo.environment["K2_TUTORIAL_CAPTURE_DIR"] else { return }
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        applyAppearance(.light)
+        for section in [ToolSection.dial, .startup, .emark] {
+            for background in section == .dial ? [true, false] : [false] {
+                let picture = PictureStore()
+                picture.edit { $0.useBackground = background }
+                let emark = EmarkStore()
+                emark.add()
+                let name = section == .dial ? (background ? "dial" : "dial-layout") : section == .startup ? "startup" : "emark"
+                render(ContentView(store: UpdaterStore(), picture: picture, emark: emark,
+                                   monitor: MonitorStore(), selection: .constant(section)),
+                       size: CGSize(width: 1280, height: 1060), name: "tutorial-\(name)",
+                       scheme: .light, dir: dir, nativeTitlebar: true, cropLeading: 190)
+            }
+        }
+    }
+
+    @MainActor
+    func testRenderCustomPages() throws {
+        guard let dir = ProcessInfo.processInfo.environment["K2_SNAPSHOT_DIR"] else { return }
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        applyAppearance(.dark)
+        for section in [ToolSection.dial, .startup] {
+            for width: CGFloat in [1100, 1280, 1600] {
+                for offset: CGFloat in section == .dial ? [0, 2000] : [0] {
+                    render(ContentView(store: UpdaterStore(), picture: PictureStore(), emark: EmarkStore(),
+                                       monitor: MonitorStore(), selection: .constant(section)),
+                           size: CGSize(width: width, height: 720),
+                           name: "custom-\(section)-\(Int(width))-\(Int(offset))", scheme: .dark, dir: dir,
+                           scrollOffset: offset, nativeTitlebar: true)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testRenderEmarkWorkspace() throws {
+        guard let dir = ProcessInfo.processInfo.environment["K2_SNAPSHOT_DIR"] else { return }
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let emark = EmarkStore()
+        emark.add()
+        emark.add()
+        emark.update { try $0.setName("USB4 cable") }
+        emark.copied = .standard
+        for scheme: ColorScheme in [.light, .dark] {
+            applyAppearance(scheme)
+            for width: CGFloat in [1100, 1280, 1600] {
+                render(ContentView(store: UpdaterStore(), picture: PictureStore(), emark: emark,
+                                   monitor: MonitorStore(), selection: .constant(.emark)),
+                       size: CGSize(width: width, height: 880), name: "emark-\(scheme)-\(Int(width))",
+                       scheme: scheme, dir: dir, nativeTitlebar: true)
+            }
+            let store = UpdaterStore()
+            store.openResourceTutorial(.emark)
+            render(ContentView(store: store, picture: PictureStore(), emark: emark,
+                               monitor: MonitorStore(), selection: .constant(.emark)),
+                   size: CGSize(width: 1280, height: 880), name: "emark-tutorial-\(scheme)",
+                   scheme: scheme, dir: dir, nativeTitlebar: true)
+        }
+    }
+
+    @MainActor
     func testRenderOtherPages() throws {
         guard let dir = ProcessInfo.processInfo.environment["K2_SNAPSHOT_DIR"] else { return }
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -148,6 +312,23 @@ final class UISnapshotHarness: XCTestCase {
         }
     }
 
+    /// Public README captures use the window compositor for native glass controls.
+    @MainActor
+    func testRenderReadmePages() throws {
+        guard let dir = ProcessInfo.processInfo.environment["K2_README_CAPTURE_DIR"] else { return }
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        applyAppearance(.light)
+        for (name, section) in [("monitor", ToolSection.monitor), ("dial", .dial),
+                                ("startup", .startup), ("emark", .emark)] {
+            let emark = EmarkStore()
+            if section == .emark { emark.add() }
+            render(ContentView(store: UpdaterStore(), picture: PictureStore(), emark: emark,
+                               monitor: MonitorStore(), selection: .constant(section)),
+                   size: CGSize(width: 1280, height: 1040), name: name, scheme: .light,
+                   dir: dir, nativeTitlebar: true)
+        }
+    }
+
     static var records: [MonitorRecord] {
         [
             MonitorRecord(path: "/Users/k2/Recordings/K2-2026-10-09-2041.sqlite", count: 18422,
@@ -160,7 +341,7 @@ final class UISnapshotHarness: XCTestCase {
     @MainActor
     private func render(_ view: some View, size: CGSize, name: String,
                         scheme: ColorScheme, dir: String, scrollOffset: CGFloat? = nil,
-                        nativeTitlebar: Bool = false, settleDelay: TimeInterval = 0.5) {
+                        nativeTitlebar: Bool = false, settleDelay: TimeInterval = 0.5, cropLeading: CGFloat = 0) {
         // Without an explicit opaque backdrop the capture keeps alpha, and the
         // default-coloured text becomes invisible against a white preview.
         let root = view
@@ -205,6 +386,40 @@ final class UISnapshotHarness: XCTestCase {
                 hosting.layoutSubtreeIfNeeded()
             }
         }
+        if name.hasPrefix("sidebars-") {
+            func sidebarBackdrops(_ view: NSView) -> [NSSplitView] {
+                ((view as? NSSplitView).map { [$0] } ?? []) + view.subviews.flatMap(sidebarBackdrops)
+            }
+            let backdrops = sidebarBackdrops(hosting).filter {
+                let rect = hosting.convert($0.bounds, from: $0)
+                return rect.midX > size.width - LayoutMetrics.connectionSidebarWidth
+            }
+            XCTAssertFalse(backdrops.isEmpty)
+            let local = NSPoint(x: size.width - 180, y: 95)
+            let point = hosting.superview!.convert(local, from: hosting)
+            let hit = hosting.hitTest(point)
+            XCTAssertNotNil(hit, "The right sidebar must remain interactive")
+            for backdrop in backdrops {
+                XCTAssertFalse(hit?.isDescendant(of: backdrop) == true,
+                               "The sidebar background must not intercept controls")
+            }
+        }
+        if name.hasPrefix("custom-") {
+            func exportButtons(_ view: NSView) -> [ToolbarExportMenuButton] {
+                (view as? ToolbarExportMenuButton).map { [$0] } ?? view.subviews.flatMap(exportButtons)
+            }
+            let buttons = exportButtons(hosting).filter { !$0.isHidden && $0.visibleRect.width > 0 }
+            XCTAssertFalse(buttons.isEmpty, "Export button must be present in \(name)")
+            for button in buttons {
+                XCTAssertEqual(button.bounds.width, 56, accuracy: 0.5)
+                XCTAssertEqual(button.bounds.height, 40, accuracy: 0.5)
+                for x: CGFloat in [1, 28, 50, 55] {
+                    let point = hosting.superview!.convert(NSPoint(x: x, y: 20), from: button)
+                    let hit = hosting.hitTest(point)
+                    XCTAssertTrue(hit === button, "Entire export capsule must receive clicks in \(name), x=\(x)")
+                }
+            }
+        }
         if composite {
             let capture = Process()
             capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -220,7 +435,15 @@ final class UISnapshotHarness: XCTestCase {
             XCTFail("no bitmap for \(name)"); return
         }
         hosting.cacheDisplay(in: hosting.bounds, to: rep)
-        guard let png = rep.representation(using: .png, properties: [:]) else {
+        let outputRep: NSBitmapImageRep
+        if cropLeading > 0, let cg = rep.cgImage {
+            let ratio = CGFloat(cg.width) / size.width
+            let crop = CGRect(x: cropLeading * ratio, y: 0,
+                              width: (size.width - cropLeading) * ratio, height: CGFloat(cg.height))
+            guard let cropped = cg.cropping(to: crop) else { XCTFail("Cannot crop capture"); return }
+            outputRep = NSBitmapImageRep(cgImage: cropped)
+        } else { outputRep = rep }
+        guard let png = outputRep.representation(using: .png, properties: [:]) else {
             XCTFail("no png for \(name)"); return
         }
         let url = URL(fileURLWithPath: dir).appendingPathComponent("\(name).png")

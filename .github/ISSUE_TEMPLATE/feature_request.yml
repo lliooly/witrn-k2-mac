@@ -1,24 +1,25 @@
-name: Feature request
-description: Suggest an improvement to the analysis or offline tools.
+name: 功能建议
+description: 改进维简 Mac 的使用体验、兼容性或开发文档。
 title: "[Feature]: "
 labels: [enhancement]
 body:
   - type: textarea
     id: problem
     attributes:
-      label: What problem should this solve?
+      label: 想解决什么问题？
+      description: 描述使用场景和当前遇到的困难。
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed change
+      label: 希望怎样改进？
     validations:
       required: true
   - type: checkboxes
     id: safety
     attributes:
-      label: Safety and data
+      label: 资料范围
       options:
-        - label: This request does not require publishing firmware, device backups, or unredacted hardware traces.
+        - label: 此建议不要求公开固件、设备备份或原始通信捕获。
           required: true

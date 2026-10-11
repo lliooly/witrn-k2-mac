@@ -74,3 +74,6 @@ dist/
 .swiftpm/
 htmlcov/
 coverage.xml
+
+# Independent local research checkout (not an application dependency)
+/WITRN-K2-REVERSE/

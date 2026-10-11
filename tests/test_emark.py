@@ -12,6 +12,45 @@ from k2up.gui_bridge import main
 
 
 class EmarkTests(unittest.TestCase):
+    def test_uninitialized_bank_has_actionable_message_without_accepting_corruption(self):
+        for header in (b'\x00' * 4, b'\xff' * 4):
+            raw = header + b'\xff' * (666 - 4)
+            with self.assertRaisesRegex(ValueError, "设备尚未保存自定义 E-Mark 配置。内置档位不在本次读取范围内"):
+                validate_bank(raw)
+            damaged = bytearray(raw); damaged[6] = 0
+            with self.assertRaisesRegex(ValueError, "配置数量或默认组无效"):
+                validate_bank(damaged)
+        self.assertEqual(validate_bank(b'\xff' * 4 + b'\x00\x00' + b'\xff' * 660)[5], 0)
+
+    def test_read_uninitialized_bank_preserves_raw_backup_and_does_not_write(self):
+        from k2up.firmware import APP_START
+        from k2up.gui_bridge import Events
+        from k2up.picture_device import transfer_resource, load_backup
+        from k2up.picture_simulator import PictureTransport
+        from k2up.protocol import Protocol
+        from k2up.updater import Updater
+
+        transport = PictureTransport()
+        protocol = Protocol(transport)
+        identity = Updater(protocol).probe()
+        resource = resource_for('emark')
+        original = b'\x00' * 4 + b'\xff' * (resource.allocation - 4)
+        offset = resource.address - APP_START
+        transport.memory[offset:offset + resource.allocation] = original
+        request = {'id': str(uuid.uuid4()), 'operation': 'resource-read', 'resource_kind': 'emark'}
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root) / 'backup'
+            result = transfer_resource(request, Events(request, io.StringIO()), protocol, identity, directory)
+            self.assertFalse(result['resource_valid'])
+            self.assertIn('设备尚未保存自定义 E-Mark 配置。内置档位不在本次读取范围内', result['resource_error'])
+            self.assertEqual(Path(result['resource_path']).read_bytes(), original[:resource.size])
+            _, raw, metadata = load_backup(directory / 'manifest.json')
+            self.assertEqual(raw, original)
+            self.assertTrue(metadata['two_reads_match'])
+        self.assertFalse(transport.erased)
+        self.assertFalse(any(packet.command in (8, 9, 23) for packet in transport.sent))
+        self.assertEqual(bytes(transport.memory[offset:offset + resource.allocation]), original)
+
     def test_exact_record_layout_and_checksum(self):
         data = sample_record("Cable A")
         self.assertEqual(len(data), 66)

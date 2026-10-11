@@ -9,6 +9,8 @@ final class EmarkStore: ObservableObject {
     @Published private(set) var bank = EmarkBank.empty
     @Published var selected = 0
     @Published var projectURL: URL?
+    @Published private(set) var projectName = "我的 K2 E-Mark"
+    private var savedName = "我的 K2 E-Mark"
     @Published var copied: EmarkRecord?
     @Published var error: String?
     @Published private(set) var dirty = false
@@ -35,7 +37,7 @@ final class EmarkStore: ObservableObject {
     }
     private func changed() {
         selected = bank.count == 0 ? 0 : min(max(0, selected), bank.count - 1)
-        dirty = bank != saved; undoAvailable = !undoStack.isEmpty; redoAvailable = !redoStack.isEmpty
+        dirty = bank != saved || projectName != savedName; undoAvailable = !undoStack.isEmpty; redoAvailable = !redoStack.isEmpty
     }
     func undo() { guard let next = undoStack.popLast() else { return }; redoStack.append(bank); bank = next; lastGroup = nil; clearDraftErrors(); changed() }
     func redo() { guard let next = redoStack.popLast() else { return }; undoStack.append(bank); bank = next; lastGroup = nil; clearDraftErrors(); changed() }
@@ -64,9 +66,16 @@ final class EmarkStore: ObservableObject {
             throw PictureError.invalid("输入超出范围或格式无效")
         }; return number
     }
+    func renameProject(_ name: String) {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        projectName = clean
+        changed()
+    }
     func newProject() {
         guard allowDiscard() else { return }
         bank = .empty; saved = bank; projectURL = nil; selected = 0
+        projectName = "我的 K2 E-Mark"; savedName = projectName
         undoStack.removeAll(); redoStack.removeAll(); clearDraftErrors(); changed()
     }
     @discardableResult func allowDiscard() -> Bool {
@@ -76,7 +85,7 @@ final class EmarkStore: ObservableObject {
         alert.addButton(withTitle: "保存"); alert.addButton(withTitle: "取消"); alert.addButton(withTitle: "不保存")
         switch alert.runModal() {
         case .alertFirstButtonReturn: return save()
-        case .alertThirdButtonReturn: saved = bank; clearDraftErrors(); changed(); return true
+        case .alertThirdButtonReturn: saved = bank; savedName = projectName; clearDraftErrors(); changed(); return true
         default: return false
         }
     }
@@ -87,7 +96,10 @@ final class EmarkStore: ObservableObject {
     func open(_ url: URL) {
         do {
             guard (try url.resourceValues(forKeys: [.fileSizeKey])).fileSize ?? Int.max <= 65536 else { throw PictureError.invalid("工程文件过大") }
-            let next = try EmarkBank.decode(Data(contentsOf: url)); guard allowDiscard() else { return }
+            let data = try Data(contentsOf: url)
+            let next = try EmarkBank.decode(data); guard allowDiscard() else { return }
+            projectName = try EmarkBank.projectName(in: data) ?? url.deletingPathExtension().lastPathComponent
+            savedName = projectName
             bank = next; saved = next; projectURL = url; selected = next.selected
             undoStack.removeAll(); redoStack.removeAll(); clearDraftErrors(); changed()
         } catch { self.error = error.localizedDescription }
@@ -96,11 +108,11 @@ final class EmarkStore: ObservableObject {
         guard invalidFields.isEmpty else { error = "请先修正编辑器中的无效输入"; return false }
         var target = asNew ? nil : projectURL
         if target == nil {
-            let panel = NSSavePanel(); panel.nameFieldStringValue = "我的 K2 E-Mark.k2emark"
+            let panel = NSSavePanel(); panel.nameFieldStringValue = projectName.replacingOccurrences(of: "/", with: "-") + ".k2emark"
             panel.allowedContentTypes = [UTType(filenameExtension: "k2emark") ?? .data]
             guard panel.runModal() == .OK else { return false }; target = panel.url
         }
-        do { try bank.encoded().write(to: target!, options: .atomic); projectURL = target; saved = bank; changed(); return true }
+        do { try bank.encoded(name: projectName).write(to: target!, options: .atomic); projectURL = target; saved = bank; savedName = projectName; changed(); return true }
         catch { self.error = error.localizedDescription; return false }
     }
     func importRecords() {

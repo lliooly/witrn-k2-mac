@@ -1,91 +1,126 @@
-# WITRN K2 Updater RE
+<p align="center">
+  <img src="docs/assets/app-icon.png" width="112" alt="维简 Mac 应用图标">
+</p>
+<h1 align="center">维简 Mac · WITRN K2</h1>
+<p align="center">在 Mac 上看曲线、做记录，也把 K2 调成自己喜欢的样子。</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-13%2B-111827?logo=apple&amp;logoColor=white" alt="构建目标 macOS 13 及以上">
+  <img src="https://img.shields.io/badge/架构-Apple_Silicon_%7C_Intel-2563eb" alt="Universal 2 双架构">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/原创代码-MIT-16a34a" alt="原创代码采用 MIT 许可证"></a>
+</p>
+<p align="center">
+  <a href="docs/quick-start.md">开始使用</a> ·
+  <a href="docs/macos-app.md">完整指南</a> ·
+  <a href="CHANGELOG.md">更新日志</a> ·
+  <a href="https://github.com/lliooly/WITRN-K2-REVERSE">协议与逆向研究</a>
+</p>
 
-对 WITRN K2 固件容器与 WITRN UP V30 Windows 升级流程的独立分析，以及 Python/HID 升级器与原生 macOS 维护工具。项目面向协议研究与设备维护；它不是 WITRN 官方软件，也不隶属于 WITRN。
+一款面向 **维简 WITRN K2** 的原生 SwiftUI 工具箱，将日常测量和设备维护放在同一个窗口：实时曲线与本地记录、固件升级、表盘编辑、开机图和虚拟 E-Mark。未连接设备时，也能整理工程、编辑资源和查看历史记录。
 
-> **风险提示：** `flash` 会擦除并写入 K2 应用区。设备型号、固件版本或传输条件不兼容时，设备可能无法启动。先阅读协议说明、检查固件并运行离线预演；只有在你能承担风险且已确认设备进入 DFU 时，才考虑实机操作。项目不保证适用于其他硬件、Bootloader 或固件版本。
+本项目是独立社区软件，与 WITRN 无隶属关系，未获厂商认可或赞助。当前打包版本为 **0.7.1**；构建目标为 macOS 13+，Apple Silicon / Intel 双架构。最低系统和 Intel 实机的验证情况见下方说明。
 
-## 项目范围
+![维简 Mac 上位机页面：实时读数、曲线区域和记录操作](docs/assets/monitor.png)
 
-- 静态分析 K2 `.k2` 固件容器、HID 帧、命令及升级阶段。
-- 提供离线 `inspect`、完整流程 `dry-run`、只读 `probe` / `backup` 和显式 `flash` 命令。
-- 在写入后逐字节读回应用正文；只有校验一致才写提交标记并发送退出命令。
-- 包含内存模拟传输和故障注入，用于检查主机端流程；模拟结果不证明真实硬件兼容。
+> 图中为当前 SwiftUI 页面在未连接设备时的渲染；表盘读数和 E-Mark 模板是预览示例，截图不代表设备连接、写入或硬件验证成功。
 
-分析依据与实现限制见[反向工程报告](reverse/REPORT.md)和[协议说明](docs/protocol.md)。项目曾在一台 K2 上完成一次 3.4 → 5.8 升级并校验完整读回；这不代表其他设备或版本已验证。没有随仓库发布设备备份、实机通信日志或厂商二进制。
+## 一个窗口，五种用途
 
-## macOS 图形版
+| 页面 | 可以做什么 |
+| --- | --- |
+| **上位机** | 查看电压、电流、功率、温度与 D± 曲线；SQLite 长时间记录；暂停、继续、自动停止；区间统计；CSV / SQLite 交换和 PNG 曲线导出 |
+| **固件升级** | 四步向导、自动检测接口、检查官网固件或选择本地 `.k2`、升级前双遍备份、写后读回校验和任务日志 |
+| **表盘** | 编辑 17 项布局元素，调整坐标、颜色、字号和精度；拖动预览；官方 `.pic` 导入导出；保存 `.k2project` 工程 |
+| **开机图** | 导入 BMP / PNG / JPEG，裁剪、缩放、留边或拉伸；转换为设备图像并单独备份与写入 |
+| **虚拟 E-Mark** | 管理最多 10 组自定义配置、默认组和排序；官方 `.wtemark` 交换；高级 VDO 编辑与 `.k2emark` 工程 |
 
-提供原生 SwiftUI 图形界面，默认进入上位机（曲线与记录），并提供固件升级、表盘、开机图和虚拟 E-Mark。设备连接统一放在可收起的右侧栏，切换页面不改变连接；工程文件操作、设备读写与任务状态分别组织。支持官方 `.pic` 导入导出、17 项布局元素的坐标／颜色／字号／精度编辑、画布拖动、BMP／PNG／JPEG 裁剪和缩放，以及包含图片的 `.k2project` 工程保存。各类资源分别读取、备份、写入和恢复；擦写前强制执行完整扇区双遍备份，读回校验覆盖整个擦除范围。窗口中不含模拟和测试入口。
+<details>
+<summary><strong>看看资源编辑界面</strong></summary>
 
-K2Picture 格式与资源区依据见[静态分析记录](reverse/K2PICTURE.md)。0.3.0 的开机图写入已在本机 K2 上读回一致，用户确认重新上电正常显示；背景及布局资源的实机效果仍待验证。字体和基线预览为近似，屏幕使用固定示例值。
+### 表盘
 
-0.4.0 新增完整虚拟 E-Mark 管理：10 组配置、默认组及排序、官方 `.wtemark` 导入导出、名称和身份／线材参数、原始 VDO 编辑、`.k2emark` 工程与撤销。设备读取、写前双遍备份、完整扇区校验和恢复复用资源框架。格式及地址依据见 [E-Mark 静态分析](reverse/K2EMARK.md)；E-Mark 实机读写仍待验证。
+![表盘编辑界面，包含画布预览、元素设置和设备侧栏](docs/assets/dial.png)
 
-0.5.0 新增「曲线与记录」：普通模式只读采集、电压／电流／功率／温度／D±曲线、长时间 SQLite 记录、暂停／继续、自动停止、历史文件与官方 CSV/SQLite 交换、区间统计和 PNG 曲线导出。采集协议改编自 MIT [witrn-driver](https://github.com/didim99/witrn-driver)，许可与修改见 [第三方说明](third_party/README.md)。0.5.1 修正 USB 到达时间抖动导致的采样漂移，并依据 K2 5.8 实机捕获启用遥测双校验。只读实机采集、暂停／继续、自动停止、无负载及正常充电负载读数对照、实机记录的三种格式往返已验证；反向接线及官方程序往返仍待验证。详见 [曲线工具说明](docs/k2-monitor.md)与[实机验证记录](docs/k2-monitor-hardware-validation.md)。
+### 开机图
 
-本地构建生成 `dist/K2 Updater.app`，内置 Python、HIDAPI 与 SQLite，面向 macOS 13+ 的 Apple Silicon / Intel；使用 ad-hoc 本地签名。本次交付旁路应用为 `dist/K2 Updater 0.5.1.app`。构建、使用方法和验证范围见 [macOS 图形版说明](docs/macos-app.md)。
+![开机图编辑界面，包含图像预览和资源操作](docs/assets/startup.png)
 
-## 安装
+### 虚拟 E-Mark
 
-需要 Python 3.9 或更新版本。离线检查和模拟不需要 USB 权限或 HIDAPI；连接设备时安装 `requirements.txt` 中的 HIDAPI 后端：
+![虚拟 E-Mark 编辑界面，包含配置集合和身份参数](docs/assets/emark.png)
+
+</details>
+
+## 开始使用
+
+目前以**源码构建**为可靠入口。预编译包是否可用，以 [Releases](https://github.com/lliooly/witrn-k2-mac/releases) 中实际上传的附件为准；仓库不附带厂商固件。应用只做 ad-hoc 本地签名，尚未使用 Developer ID 签名或公证。
+
+需要 Xcode 26 或更新版本（含 macOS 26+ SDK）、Python 3.9 和打包依赖。Universal 2 构建要求 Python 及其标准库扩展支持两个架构；Apple Silicon 上验证 Intel 后台还需要 Rosetta。环境细节见[构建说明](docs/macos-app.md#本地构建)。
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
+git clone https://github.com/lliooly/witrn-k2-mac.git
+cd witrn-k2-mac
+python3.9 -m venv .venv-app
+.venv-app/bin/python -m pip install -r requirements-app.txt
+./script/build_and_run.sh --build-only
+open 'dist/K2 Updater.app'
 ```
 
-仓库不包含官方固件。请从 WITRN 官方渠道取得适用于你设备的 `.k2` 文件，并在本机指定文件路径。固件、厂商升级器和设备备份都被 `.gitignore` 排除；提交前仍应检查 `git status` 和待提交文件。
+首次连接、文件格式和常见问题见[快速开始](docs/quick-start.md)。应用显示名为「维简 Mac」；构建产物路径、可执行文件名和数据目录沿用原名，以兼容现有脚本和本地资料。
 
-## 离线检查
+## 连接与写入前先了解这些
+
+- **看曲线：** K2 正常开机，用支持数据传输的 USB 线连接 CC1/HID 口，选择接口后连接。
+- **维护设备：** 按教程进入 DFU，再检测设备身份。设备维护和实时采集不能同时占用接口。
+- **擦写保护：** 图形版写入前先双遍读取并持久化备份：固件升级备份完整 Flash，资源写入备份涉及的完整扇区；资源写入保留同扇区其他数据，随后校验整个擦除范围。固件正文读回一致后才提交并退出。
+- **失败处理：** 失败即停止，不自动重试。擦写之后拔线、断电或强制退出可能使应用区不完整；保留备份并重新检查 DFU 状态。
+
+备份与日志位于 `~/Library/Application Support/K2 Updater/`，请自行保存副本。项目不收集上传这些文件；分享问题前请移除序列号、个人路径和原始通信数据。虚拟 E-Mark 参数不会提高实体线材的电气承载能力。
+
+### 已验证与待验证
+
+| 能力 | 当前证据与边界 |
+| --- | --- |
+| 固件升级 | 曾在一台 K2 上完成 3.4 → 5.8 并完整读回；不代表其他型号或版本兼容 |
+| 实时采集与文件交换 | K2 5.8 普通模式采集、暂停 / 继续、自动停止和三种记录格式往返已验证 |
+| 开机图 | 已实机写入并校验完整扇区，重新上电显示正常 |
+| 表盘背景 / 布局、E-Mark、恢复刷写 | 有离线测试和模拟覆盖，完整实机效果或恢复流程仍待验证 |
+| Intel / macOS 13 | 为构建目标；双架构包可检查，Intel USB 与 macOS 13 实机仍待验证 |
+
+更详细的依据见[应用验证范围](docs/macos-app.md#验证范围)与[遥测实机记录](docs/k2-monitor-hardware-validation.md)。离线测试通过不等于实机兼容。
+
+## 命令行与开发
+
+Python CLI 可独立进行固件检查、离线预演、设备探测和备份。离线操作不需要 USB 或 HIDAPI：
 
 ```sh
 python3 k2_updater.py inspect /path/to/K2_APP.k2
 python3 k2_updater.py dry-run /path/to/K2_APP.k2
-```
-
-`inspect` 只检查本地文件。`dry-run` 使用内存模拟器跑完握手、擦除、写入、读回、提交和退出，不访问 USB。输出中的 `simulation_only: true` 与 `hardware_validated: false` 只描述模拟结果。
-
-## 设备命令
-
-先按设备和厂商说明进入 DFU，再连接支持数据传输的 USB 线。以下命令按只读探测、备份、显式刷写的顺序列出：
-
-```sh
-.venv/bin/python k2_updater.py devices
-.venv/bin/python k2_updater.py probe --dfu
-.venv/bin/python k2_updater.py backup --dfu --output-dir k2_backups/before-upgrade
-```
-
-备份会读取设备闪存并在本机生成镜像与恢复容器；它不是云端或仓库备份。请妥善保管，也不要公开上传。完成独立检查后，只有明确接受擦写风险才执行：
-
-```sh
-.venv/bin/python k2_updater.py flash /path/to/K2_APP.k2 --dfu --yes
-```
-
-`--yes` 是真实擦除/写入的显式确认。程序会在任何设备 I/O 前校验固件；识别不出 K2、回包校验失败、写入短缺或读回不一致时会停止。失败不会自动重试或发送收尾命令。若错误发生在擦除后，应用区可能处于不完整状态。
-
-通信日志可能包含设备序列号、接口路径、设备信息和完整 HID 帧；日志默认保存在 `k2_logs/`。分享日志前请检查并脱敏。不要把真实日志、设备备份、序列号、个人路径或私有固件加入 Git。
-
-## 开发
-
-测试使用 Python 标准库和合成固件，不需要厂商程序、官方固件或连接设备：
-
-```sh
 python3 -m unittest discover -s tests -v
 ```
 
-目录概览：
+连接设备时先安装 `requirements.txt`。真实刷写会擦除设备应用区，CLI 命令及确认选项见[命令行指南](docs/cli.md)。
 
-| 路径 | 内容 |
+| 路径 | 职责 |
 | --- | --- |
-| `k2up/` | 固件解析、HID 协议、升级流程、备份、模拟器和 CLI |
-| `reverse/` | 静态分析脚本与分析报告 |
-| `docs/protocol.md` | 帧格式、命令、地址与执行顺序 |
-| `tests/` | 合成样本上的离线回归测试 |
-| `macos/` | SwiftUI 应用、后台消息协议和 Swift 测试 |
-| `script/` | 双架构后台构建、应用打包和签名检查 |
+| `macos/` | SwiftUI 应用、Swift 核心模型与测试 |
+| `k2up/` | Python 后台、HID 协议、记录存储与 CLI |
+| `script/` | 构建、打包、离线验证与文档检查 |
+| `tests/` | 合成样本与模拟器回归 |
+| `docs/` | 使用、兼容性、发布和实现说明 |
+| `reverse/` | 应用开发所保留的分析脚本和证据 |
 
-复现静态分析需要用户自行取得 WITRN UP V30 文件，并在本机运行 `reverse/` 下的脚本。原始厂商程序、反编译输出、IDA 数据库和固件均不由本仓库分发。详见 [`reverse/REPORT.md`](reverse/REPORT.md)。
+请先阅读[贡献指南](CONTRIBUTING.md)。改动前后运行 Python 与 Swift 检查；完整命令见指南。离线 CI 检查代码与文档，不接触 USB，也不自动发布安装包。
 
-## 许可与商标
+## 与 reverse 仓库配合
 
-本仓库原创代码和文档按 [MIT License](LICENSE) 授权；`k2up/data/firmware_decode.bin` 的说明见 [NOTICE](NOTICE.md)。WITRN、WITRN K2 及相关产品名称属于其各自权利人；本项目未获厂商认可或赞助。厂商程序、固件及其他第三方材料不包含在本仓库中，也不因本项目的许可声明而获得再许可。
+[WITRN-K2-REVERSE](https://github.com/lliooly/WITRN-K2-REVERSE) 整理 HID / DFU、文件格式、研究证据、JSON 进程接口与 Python 函数契约；本仓库负责可使用的 Mac 应用和后台集成。协议说明与实现通过链接和人工复核对齐，**不是自动同步的共享 SDK**。
+
+- 使用应用：从这里开始。
+- 自行开发上位机或核对命令：查看 reverse 的[接口入口](https://github.com/lliooly/WITRN-K2-REVERSE/blob/main/api/README.md)。
+- 修改跨仓库协议：按[联动约定](docs/repository-map.md)记录来源、提交版本与验证边界。
+
+## 贡献、致谢与许可
+
+感谢所有参与开发、测试、研究和问题反馈的人。[贡献者与致谢](CONTRIBUTORS.md)列出维护者、贡献记录和上游来源；欢迎从文档、复现步骤和脱敏的兼容性反馈开始参与。
+
+原创代码与文档采用 [MIT License](LICENSE)。第三方图片、依赖和协议数据的适用范围见 [NOTICE](NOTICE.md) 和[第三方说明](third_party/README.md)；第三方 DFU 插图适用其原有 GPL-3.0 许可。项目许可不授予厂商软件、固件或商标权利。

@@ -2,11 +2,17 @@ import Foundation
 
 public struct PictureProject: Codable, Equatable, Sendable {
     public var schema = 1
+    public var name: String?
     public var layout: PictureLayout
     public var background: PixelImage?
+    /// Optional for compatibility with projects saved before this choice existed.
+    public var useBackground: Bool?
+    public var usesBackground: Bool { useBackground ?? (background != nil) }
     public var startup: PixelImage?
 
-    public init(layout: PictureLayout = .standard, background: PixelImage? = nil, startup: PixelImage? = nil) {
+    public init(name: String? = "我的 K2 工程", layout: PictureLayout = .standard, background: PixelImage? = nil, startup: PixelImage? = nil, useBackground: Bool? = nil) {
+        self.name = name
+        self.useBackground = useBackground
         self.layout = layout; self.background = background; self.startup = startup
     }
 

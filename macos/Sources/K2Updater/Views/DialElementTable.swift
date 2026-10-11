@@ -8,48 +8,66 @@ struct DialElementTable: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("表盘元素").font(.title3.weight(.semibold))
-            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 10) {
-                GridRow {
-                    Text("元素").frame(width: 74, alignment: .leading)
-                    Text("显示").frame(width: 40)
-                    Text("X").frame(width: 64)
-                    Text("Y").frame(width: 64)
-                    Text("颜色").frame(width: 36)
-                    Text("字号").frame(width: 80)
-                    Text("小数位").frame(width: 64)
-                }.font(.callout).foregroundStyle(.secondary)
-                ForEach(picture.project.layout.elements) { element in
-                    DialElementRow(picture: picture, elementID: element.id)
-                }
-            }.controlSize(.small)
-            Text("点击元素名称可在画布中选中。X / Y 为设备坐标；图标不设置字号，没有小数位的元素显示 —")
-                .font(.callout).foregroundStyle(.secondary).frame(maxWidth: 440, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 16) {
+                    elementColumn(0..<9)
+                    Divider().frame(height: 362)
+                    elementColumn(9..<17)
+                }.fixedSize(horizontal: true, vertical: false)
+            }.frame(height: 362)
         }.padding(14).background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
     }
+    private func elementColumn(_ indices: Range<Int>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text("元素").frame(width: 56, alignment: .leading)
+                Text("显示").frame(width: 32)
+                Text("X").frame(width: 44)
+                Text("Y").frame(width: 44)
+                Text("颜色").frame(width: 28)
+                Text("字号").frame(width: 56)
+                Text("小数位").frame(width: 44)
+            }.font(.caption).foregroundStyle(.secondary).frame(height: 20)
+            ForEach(indices, id: \.self) { index in
+                let element = picture.project.layout.element(index)
+                DialElementRow(picture: picture, element: element,
+                               precision: element.precisionIndex.map { picture.project.layout.precision($0) },
+                               isSelected: picture.selectedElement == index).equatable()
+                    .frame(height: 30)
+            }
+        }.controlSize(.small)
+    }
+
 }
 
-private struct DialElementRow: View {
-    @ObservedObject var picture: PictureStore
-    let elementID: Int
+private struct DialElementRow: View, Equatable {
+    let picture: PictureStore
+    let element: DialElement
+    let precision: Int?
+    let isSelected: Bool
+    private var elementID: Int { element.id }
     private var editing: DialElementEditing { DialElementEditing(picture: picture, elementID: elementID) }
-    private var element: DialElement { editing.element }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.picture === rhs.picture && lhs.element == rhs.element &&
+            lhs.precision == rhs.precision && lhs.isSelected == rhs.isSelected
+    }
 
     var body: some View {
-        GridRow {
+        HStack(spacing: 6) {
             Button { picture.selectedElement = elementID } label: {
-                Text(element.title).fontWeight(picture.selectedElement == elementID ? .semibold : .regular)
-                    .foregroundStyle(picture.selectedElement == elementID ? Color.accentColor : Color.primary)
-                    .frame(width: 74, alignment: .leading)
+                Text(element.title).fontWeight(isSelected ? .semibold : .regular)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                    .frame(width: 56, alignment: .leading)
             }.buttonStyle(.plain).help("在画布中选中\(element.title)")
             Toggle("显示\(element.title)", isOn: Binding(get: { element.enabled == 1 }, set: { editing.setVisible($0) }))
-                .toggleStyle(.switch).labelsHidden().frame(width: 40)
-            DialCoordinateField(picture: picture, elementID: elementID, xAxis: true).frame(width: 64)
-            DialCoordinateField(picture: picture, elementID: elementID, xAxis: false).frame(width: 64)
+                .toggleStyle(.switch).labelsHidden().frame(width: 32)
+            DialCoordinateField(picture: picture, elementID: elementID, title: element.title, xAxis: true, value: element.x, isSelected: isSelected).frame(width: 44)
+            DialCoordinateField(picture: picture, elementID: elementID, title: element.title, xAxis: false, value: element.y, isSelected: isSelected).frame(width: 44)
             ColorPicker("\(element.title)颜色", selection: Binding(get: { element.swiftColor }, set: { editing.setColor($0) }), supportsOpacity: true)
-                .labelsHidden().frame(width: 36)
+                .labelsHidden().frame(width: 28)
             if element.isIcon {
-                Text("—").foregroundStyle(.secondary).frame(width: 80)
+                Text("—").foregroundStyle(.secondary).frame(width: 56)
                     .help("图标不设置字号")
             } else {
                 Picker("\(element.title)字号", selection: Binding(get: { Int(element.font) }, set: { editing.setFont($0) })) {
@@ -57,16 +75,15 @@ private struct DialElementRow: View {
                     if Int(element.font) >= DialElement.fontTitles.count {
                         Text("未知 \(element.font)").tag(Int(element.font)).disabled(true)
                     }
-                }.labelsHidden().frame(width: 80)
+                }.labelsHidden().frame(width: 56)
             }
-            if let index = element.precisionIndex {
-                let current = picture.project.layout.precision(index)
-                Picker("\(element.title)小数位", selection: Binding(get: { picture.project.layout.precision(index) }, set: { editing.setPrecision($0) })) {
+            if let current = precision {
+                Picker("\(element.title)小数位", selection: Binding(get: { current }, set: { editing.setPrecision($0) })) {
                     ForEach(Array(element.precisionRange), id: \.self) { Text(String($0)).tag($0) }
                     if !element.precisionRange.contains(current) { Text(String(current)).tag(current).disabled(true) }
-                }.labelsHidden().frame(width: 64)
+                }.labelsHidden().frame(width: 44)
             } else {
-                Text("—").foregroundStyle(.secondary).frame(width: 64)
+                Text("—").foregroundStyle(.secondary).frame(width: 44)
                     .help("此元素没有小数位设置")
             }
         }.font(.callout)
@@ -118,19 +135,21 @@ struct DialElementEditing {
 }
 
 private struct DialCoordinateField: View {
-    @ObservedObject var picture: PictureStore
+    let picture: PictureStore
     let elementID: Int
+    let title: String
     let xAxis: Bool
+    let value: Int16
+    let isSelected: Bool
     @State private var text = ""
     @State private var group = UUID()
     @FocusState private var focused: Bool
     private var editing: DialElementEditing { DialElementEditing(picture: picture, elementID: elementID) }
-    private var value: Int16 { xAxis ? editing.element.x : editing.element.y }
 
     var body: some View {
         TextField(xAxis ? "X" : "Y", text: $text)
             .textFieldStyle(.roundedBorder).font(.callout.monospacedDigit())
-            .accessibilityLabel("\(editing.element.title)\(xAxis ? "X" : "Y")坐标")
+            .accessibilityLabel("\(title)\(xAxis ? "X" : "Y")坐标")
             .focused($focused).onAppear { reset() }
             .onSubmit { commit(); focused = false }
             .onChange(of: text) { _ in if focused { commit() } }
@@ -138,10 +157,10 @@ private struct DialCoordinateField: View {
                 if active { group = UUID(); picture.selectedElement = elementID } else { reset() }
             }
             .onChange(of: value) { _ in reset() }
-            .onChange(of: picture.selectedElement) { next in
-                if focused && next != elementID { commit(); focused = false }
+            .onChange(of: isSelected) { selected in
+                if focused && !selected { commit(); focused = false }
             }
-            .help("\(editing.element.title)的设备坐标，范围 −32768 到 32767。")
+            .help("\(title)的设备坐标，范围 −32768 到 32767。")
     }
     private func reset() { text = String(value) }
     private func commit() {
