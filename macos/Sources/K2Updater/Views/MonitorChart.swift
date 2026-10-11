@@ -24,27 +24,7 @@ struct MonitorChart: View {
                 MonitorCursorReadout(interaction: interaction, points: points, channel: channel)
             }
             .frame(height: 18)
-            Chart {
-                if #available(macOS 15, *) {
-                    // One vectorized plot preserves every query point and each
-                    // segment without creating thousands of SwiftUI marks.
-                    LinePlot(MonitorLinePoint.project(points, channel: channel),
-                             x: .value("时间", \.time), y: .value(channel.title, \.value),
-                             series: .value("分段", \.segment))
-                        .foregroundStyle(color).interpolationMethod(.linear)
-                } else {
-                    ForEach(points) { point in
-                        if let value = point.value(channel) {
-                            LineMark(x: .value("时间", point.time), y: .value(channel.title, value), series: .value("分段", point.segment))
-                                .foregroundStyle(color).interpolationMethod(.linear)
-                        }
-                    }
-                }
-                if let selection {
-                    RectangleMark(xStart: .value("开始", selection.lowerBound), xEnd: .value("结束", selection.upperBound))
-                        .foregroundStyle(Color.accentColor.opacity(0.12))
-                }
-            }
+            plot
             .chartXScale(domain: start...max(start + 0.001, end))
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 5)) { value in
@@ -61,6 +41,38 @@ struct MonitorChart: View {
         .padding(10)
         .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
     }
+
+    // Keep availability outside ChartContentBuilder: Xcode 26 cannot combine
+    // the legacy LineMark builder with the newer vectorized LinePlot branch.
+    @ViewBuilder
+    private var plot: some View {
+        if #available(macOS 15, *) {
+            Chart {
+                LinePlot(MonitorLinePoint.project(points, channel: channel),
+                         x: .value("时间", \.time), y: .value(channel.title, \.value),
+                         series: .value("分段", \.segment))
+                    .foregroundStyle(color).interpolationMethod(.linear)
+                if let selection {
+                    RectangleMark(xStart: .value("开始", selection.lowerBound), xEnd: .value("结束", selection.upperBound))
+                        .foregroundStyle(Color.accentColor.opacity(0.12))
+                }
+            }
+        } else {
+            Chart {
+                ForEach(points) { point in
+                    if let value = point.value(channel) {
+                        LineMark(x: .value("时间", point.time), y: .value(channel.title, value), series: .value("分段", point.segment))
+                            .foregroundStyle(color).interpolationMethod(.linear)
+                    }
+                }
+                if let selection {
+                    RectangleMark(xStart: .value("开始", selection.lowerBound), xEnd: .value("结束", selection.upperBound))
+                        .foregroundStyle(Color.accentColor.opacity(0.12))
+                }
+            }
+        }
+    }
+
 }
 
 /// A projection, not downsampling: matches the original LineMark's nil filter.

@@ -92,18 +92,24 @@ private struct NativeGlassBackground: NSViewRepresentable {
         let view = NSGlassEffectView()
         view.style = .regular
         view.cornerRadius = 0
+        // The property is declared only by the macOS 27 SDK (Xcode 27 / Swift 6.4).
+        #if compiler(>=6.4)
         if #available(macOS 27.0, *) {
             view.effectIsInteractive = interactive
         }
+        #endif
         return view
     }
 
     func updateNSView(_ view: NSGlassEffectView, context: Context) {
         view.style = .regular
         view.cornerRadius = 0
+        // The property is declared only by the macOS 27 SDK (Xcode 27 / Swift 6.4).
+        #if compiler(>=6.4)
         if #available(macOS 27.0, *) {
             view.effectIsInteractive = interactive
         }
+        #endif
     }
 }
 
